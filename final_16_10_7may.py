@@ -272,20 +272,34 @@ elif st.session_state.view == "Itinerary Builder":
                 with st.form(f"pf_{idx}"):
                     n = st.text_input("Place", value=def_loc); c1, c2 = st.columns(2)
                     d1, t1, d2, t2 = c1.date_input("Day In", value=def_date), c1.time_input("Time In", value=def_time), c2.date_input("Day Out", value=def_date), c2.time_input("Time Out", value=datetime.time(23,59))
-                    if st.form_submit_button("Save"):
+                    c_btn1, c_btn2 = st.columns(2)
+                    save_place = c_btn1.form_submit_button("✅ Save")
+                    cancel_place = c_btn2.form_submit_button("❌ Cancel")
+
+                    if save_place:
                         v, c, la, lo = validate_location(n)
                         if v and is_valid_time_range(d1, t1, d2, t2):
                             st.session_state.itinerary.insert(idx, {"Type":"Place","Location":c,"lat":la,"lon":lo,"Destination":"-","Day In":d1,"Time In":t1,"Day Out":d2,"Time Out":t2})
                             st.session_state.edit_index = idx; resolve_timeline_overlaps(); st.session_state.action_mode = None; st.rerun()
+                    
+                    if cancel_place:
+                        st.session_state.action_mode = None; st.rerun()
             elif st.session_state.action_mode == "add_transit":
                 with st.form(f"tf_{idx}"):
                     o, d = st.text_input("Origin", value=def_loc), st.text_input("Destination"); c1, c2 = st.columns(2)
                     d1, t1, d2, t2 = c1.date_input("Day In", value=def_date), c1.time_input("Time In", value=def_time), c2.date_input("Day Out", value=def_date), c2.time_input("Time Out", value=datetime.time(23,59))
-                    if st.form_submit_button("Save"):
+                    c_btn1, c_btn2 = st.columns(2)
+                    save_transit = c_btn1.form_submit_button("✅ Save")
+                    cancel_transit = c_btn2.form_submit_button("❌ Cancel")
+
+                    if save_transit:
                         v1, c1, la1, lo1 = validate_location(o); v2, c2, la2, lo2 = validate_location(d)
                         if v1 and v2 and is_valid_time_range(d1, t1, d2, t2):
                             st.session_state.itinerary.insert(idx, {"Type":"Transit","Location":c1,"lat":la1,"lon":lo1,"Destination":c2,"dest_lat":la2,"dest_lon":lo2,"Day In":d1,"Time In":t1,"Day Out":d2,"Time Out":t2})
                             st.session_state.edit_index = idx; resolve_timeline_overlaps(); st.session_state.action_mode = None; st.rerun()
+
+                    if cancel_transit:
+                        st.session_state.action_mode = None; st.rerun()
 
     for i, item in enumerate(st.session_state.itinerary):
         if st.button(f"➕ Insert Here", key=f"ins_{i}", use_container_width=True): st.session_state.insert_index, st.session_state.action_mode = i, "select_type"; st.rerun()
