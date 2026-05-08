@@ -51,6 +51,7 @@ def get_team_symbol(team_data):
     return team_data.get('symbol', "📍")
 
 def validate_location(location_name):
+    location_name = location_name.strip()
     if location_name == "-": return True, location_name, None, None
     try:
         location = geolocator.geocode(location_name, country_codes="in")
@@ -68,30 +69,22 @@ def is_valid_time_range(d_in, t_in, d_out, t_out):
 def resolve_timeline_overlaps():
     """Ensures steps are perfectly sequential. Step N Start = Step N-1 End."""
     if len(st.session_state.itinerary) < 2: return
-    
     idx = st.session_state.edit_index if st.session_state.edit_index is not None else 0
-    
-    # Push changes FORWARD
     for i in range(idx + 1, len(st.session_state.itinerary)):
         prev = st.session_state.itinerary[i-1]
         p_end = datetime.datetime.combine(prev['Day Out'], prev['Time Out'])
         st.session_state.itinerary[i]['Day In'] = p_end.date()
         st.session_state.itinerary[i]['Time In'] = p_end.time()
-        
-        # Ensure duration is at least 1 min
         curr_end = datetime.datetime.combine(st.session_state.itinerary[i]['Day Out'], st.session_state.itinerary[i]['Time Out'])
         if curr_end <= p_end:
             new_end = p_end + datetime.timedelta(minutes=30)
             st.session_state.itinerary[i]['Day Out'] = new_end.date()
             st.session_state.itinerary[i]['Time Out'] = new_end.time()
-
-    # Push changes BACKWARD
     for i in range(idx - 1, -1, -1):
         nxt = st.session_state.itinerary[i+1]
         n_start = datetime.datetime.combine(nxt['Day In'], nxt['Time In'])
         st.session_state.itinerary[i]['Day Out'] = n_start.date()
         st.session_state.itinerary[i]['Time Out'] = n_start.time()
-        
         curr_start = datetime.datetime.combine(st.session_state.itinerary[i]['Day In'], st.session_state.itinerary[i]['Time In'])
         if curr_start >= n_start:
             new_start = n_start - datetime.timedelta(minutes=30)
@@ -124,10 +117,10 @@ def get_current_status(itinerary):
         start, end = datetime.datetime.combine(item['Day In'], item['Time In']), datetime.datetime.combine(item['Day Out'], item['Time Out'])
         if start <= now <= end:
             if item['Type'] == "Place":
-                return (item['lat'], item['lon']), f"Current Status📍: {item['Location']} until {end.strftime('%H:%M, %d %b')}", None
+                return (item['lat'], item['lon']), f"Current Status📍: {item['Location'].strip()} until {end.strftime('%H:%M, %d %b')}", None
             mid_lat, mid_lon = (item['lat'] + item.get('dest_lat', item['lat'])) / 2, (item['lon'] + item.get('dest_lon', item['lon'])) / 2
             line = [[item['lat'], item['lon']], [item['dest_lat'], item['dest_lon']]]
-            status = f"Current Status🚆: {item['Location']} -> {item['Destination']} from {start.strftime('%d %b, %H:%M')} to {end.strftime('%d %b, %H:%M')}"
+            status = f"Current Status🚆: {item['Location'].strip()} -> {item['Destination'].strip()} from {start.strftime('%d %b, %H:%M')} to {end.strftime('%d %b, %H:%M')}"
             return (mid_lat, mid_lon), status, line
     if now < datetime.datetime.combine(itinerary[0]['Day In'], itinerary[0]['Time In']): return None, "Current Status📍: Journey not started", None
     if now > datetime.datetime.combine(itinerary[-1]['Day Out'], itinerary[-1]['Time Out']): return None, "Current Status📍: Journey completed", None
@@ -159,7 +152,7 @@ def find_overlaps(current_team_id, all_teams_data):
                     my_s, my_e = datetime.datetime.combine(my_step['Day In'], my_step['Time In']), datetime.datetime.combine(my_step['Day Out'], my_step['Time Out'])
                     their_s, their_e = datetime.datetime.combine(their_step['Day In'], their_step['Time In']), datetime.datetime.combine(their_step['Day Out'], their_step['Time Out'])
                     o_start, o_end = max(my_s, their_s), min(my_e, their_e)
-                    if o_start < o_end: overlaps.append({'team': other_team['team_name'], 'location': my_step['Location'], 'start': o_start, 'end': o_end})
+                    if o_start < o_end: overlaps.append({'team': other_team['team_name'], 'location': my_step['Location'].strip(), 'start': o_start, 'end': o_end})
     return overlaps
 
 # --- 4. AUTH ---
@@ -168,7 +161,7 @@ if not st.session_state.authenticated:
     tab1, tab2 = st.tabs(["Login", "Register"])
     with tab1:
         with st.form("login_form"):
-            login_id, login_pass = st.text_input("Team ID"), st.text_input("Password", type="password")
+            login_id, login_pass = st.text_input("Team ID").strip(), st.text_input("Password", type="password")
             if st.form_submit_button("Enter"):
                 res = supabase.table("team_itineraries").select("*").eq("team_name", login_id).execute()
                 if res.data and res.data[0]['password'] == hash_password(login_pass):
@@ -185,9 +178,9 @@ if not st.session_state.authenticated:
         available_syms = [s for s in all_syms if s not in existing_symbols]
         m_count = st.slider("Members", 2, 9, 2)
         with st.form("registration_form"):
-            new_id, new_pass, topic = st.text_input("Team ID"), st.text_input("Password", type="password"), st.text_input("Topic")
+            new_id, new_pass, topic = st.text_input("Team ID").strip(), st.text_input("Password", type="password"), st.text_input("Topic").strip()
             selected_symbol = st.selectbox("Choose Symbol", available_syms) if available_syms else None
-            m_names = [st.text_input(f"Member {i+1}", key=f"reg_{i}") for i in range(m_count)]
+            m_names = [st.text_input(f"Member {i+1}", key=f"reg_{i}").strip() for i in range(m_count)]
             if st.form_submit_button("Register"):
                 if not selected_symbol: st.error("No symbols available.")
                 elif supabase.table("team_itineraries").select("team_name").eq("team_name", new_id).execute().data: st.error("ID taken.")
@@ -224,7 +217,7 @@ if st.session_state.view == "Live Dashboard":
     for t in teams_res.data:
         _, status, _ = get_current_status(deserialize_itinerary(t['itinerary_data']))
         with st.container(border=True):
-            st.markdown(f"**{get_team_symbol(t)} {t['team_name']}**")
+            st.markdown(f"**{get_team_symbol(t)} {t['team_name'].strip()}**")
             st.markdown(f"<div style='font-size:0.85em; color:gray;'>{status}</div>", unsafe_allow_html=True)
             if st.button("View Profile", key=f"vp_{t['team_name']}", use_container_width=True): st.session_state.selected_team, st.session_state.view = t['team_name'], "Team Profile"; st.rerun()
 
@@ -249,8 +242,8 @@ elif st.session_state.view == "Team Profile":
         for item in itin:
             with st.container(border=True):
                 symbol = '📍' if item['Type']=='Place' else '🚆'
-                dest_str = f" ➔ {item['Destination']}" if item['Type'] == 'Transit' else ""
-                st.markdown(f"**{symbol} {item['Location']}{dest_str}**")
+                dest_str = f" ➔ {item['Destination'].strip()}" if item['Type'] == 'Transit' else ""
+                st.markdown(f"**{symbol} {item['Location'].strip()}{dest_str}**")
                 st.markdown(f"<div style='font-size:0.85em; color:gray;'>{item['Time In'].strftime('%H:%M')}, {item['Day In'].strftime('%d %b')} to {item['Time Out'].strftime('%H:%M')}, {item['Day Out'].strftime('%d %b')}</div>", unsafe_allow_html=True)
         if target == st.session_state.user_id:
             if st.button("✏️ Edit Itinerary", type="primary", use_container_width=True): st.session_state.view, st.session_state.itinerary = "Itinerary Builder", itin; st.rerun()
@@ -270,7 +263,7 @@ elif st.session_state.view == "Itinerary Builder":
         if st.session_state.insert_index == idx:
             if st.session_state.action_mode == "add_place":
                 with st.form(f"pf_{idx}"):
-                    n = st.text_input("Place", value=def_loc); c1, c2 = st.columns(2)
+                    n = st.text_input("Place", value=def_loc).strip(); c1, c2 = st.columns(2)
                     d1, t1, d2, t2 = c1.date_input("Day In", value=def_date), c1.time_input("Time In", value=def_time), c2.date_input("Day Out", value=def_date), c2.time_input("Time Out", value=datetime.time(23,59))
                     c_btn1, c_btn2 = st.columns(2)
                     save_place = c_btn1.form_submit_button("✅ Save")
@@ -280,13 +273,15 @@ elif st.session_state.view == "Itinerary Builder":
                         v, c, la, lo = validate_location(n)
                         if v and is_valid_time_range(d1, t1, d2, t2):
                             st.session_state.itinerary.insert(idx, {"Type":"Place","Location":c,"lat":la,"lon":lo,"Destination":"-","Day In":d1,"Time In":t1,"Day Out":d2,"Time Out":t2})
-                            st.session_state.edit_index = idx; resolve_timeline_overlaps(); st.session_state.action_mode = None; st.rerun()
+                            st.session_state.edit_index = idx; resolve_timeline_overlaps()
+                            supabase.table("team_itineraries").update({"itinerary_data": serialize_itinerary(st.session_state.itinerary)}).eq("team_name", st.session_state.user_id).execute()
+                            st.session_state.action_mode = None; st.rerun()
                     
                     if cancel_place:
                         st.session_state.action_mode = None; st.rerun()
             elif st.session_state.action_mode == "add_transit":
                 with st.form(f"tf_{idx}"):
-                    o, d = st.text_input("Origin", value=def_loc), st.text_input("Destination"); c1, c2 = st.columns(2)
+                    o, d = st.text_input("Origin", value=def_loc).strip(), st.text_input("Destination").strip(); c1, c2 = st.columns(2)
                     d1, t1, d2, t2 = c1.date_input("Day In", value=def_date), c1.time_input("Time In", value=def_time), c2.date_input("Day Out", value=def_date), c2.time_input("Time Out", value=datetime.time(23,59))
                     c_btn1, c_btn2 = st.columns(2)
                     save_transit = c_btn1.form_submit_button("✅ Save")
@@ -296,7 +291,9 @@ elif st.session_state.view == "Itinerary Builder":
                         v1, c1, la1, lo1 = validate_location(o); v2, c2, la2, lo2 = validate_location(d)
                         if v1 and v2 and is_valid_time_range(d1, t1, d2, t2):
                             st.session_state.itinerary.insert(idx, {"Type":"Transit","Location":c1,"lat":la1,"lon":lo1,"Destination":c2,"dest_lat":la2,"dest_lon":lo2,"Day In":d1,"Time In":t1,"Day Out":d2,"Time Out":t2})
-                            st.session_state.edit_index = idx; resolve_timeline_overlaps(); st.session_state.action_mode = None; st.rerun()
+                            st.session_state.edit_index = idx; resolve_timeline_overlaps()
+                            supabase.table("team_itineraries").update({"itinerary_data": serialize_itinerary(st.session_state.itinerary)}).eq("team_name", st.session_state.user_id).execute()
+                            st.session_state.action_mode = None; st.rerun()
 
                     if cancel_transit:
                         st.session_state.action_mode = None; st.rerun()
@@ -309,14 +306,17 @@ elif st.session_state.view == "Itinerary Builder":
             c_text, c_edit, c_del = st.columns([7.5, 1.25, 1.25], vertical_alignment="center")
             with c_text:
                 symbol = '📍' if item['Type']=='Place' else '🚆'
-                dest_str = f" ➔ {item['Destination']}" if item['Type'] == 'Transit' else ""
-                st.markdown(f"**{symbol} {item['Location']}{dest_str}**")
+                dest_str = f" ➔ {item['Destination'].strip()}" if item['Type'] == 'Transit' else ""
+                st.markdown(f"**{symbol} {item['Location'].strip()}{dest_str}**")
                 st.markdown(f"<div style='font-size:0.85em; color:gray;'>{item['Time In'].strftime('%H:%M')}, {item['Day In'].strftime('%d %b')} to {item['Time Out'].strftime('%H:%M')}, {item['Day Out'].strftime('%d %b')}</div>", unsafe_allow_html=True)
             if c_edit.button("✏️", key=f"e_{i}"): st.session_state.edit_index, st.session_state.action_mode = i, "edit"; st.rerun()
-            if c_del.button("❌", key=f"d_{i}"): st.session_state.itinerary.pop(i); st.session_state.edit_index = max(0, i-1); resolve_timeline_overlaps(); st.rerun()
+            if c_del.button("❌", key=f"d_{i}"): 
+                st.session_state.itinerary.pop(i); st.session_state.edit_index = max(0, i-1); resolve_timeline_overlaps()
+                supabase.table("team_itineraries").update({"itinerary_data": serialize_itinerary(st.session_state.itinerary)}).eq("team_name", st.session_state.user_id).execute()
+                st.rerun()
         if is_edit:
             with st.form(f"ef_{i}"):
-                l1, l2 = st.text_input("Location", item['Location']), st.text_input("Destination", item['Destination'])
+                l1, l2 = st.text_input("Location", item['Location']).strip(), st.text_input("Destination", item['Destination']).strip()
                 c1, c2 = st.columns(2)
                 d1, t1, d2, t2 = c1.date_input("Day In", item['Day In']), c1.time_input("Time In", item['Time In']), c2.date_input("Day Out", item['Day Out']), c2.time_input("Time Out", item['Time Out'])
                 if st.form_submit_button("Update"):
@@ -327,9 +327,8 @@ elif st.session_state.view == "Itinerary Builder":
                             v2, c2, la2, lo2 = validate_location(l2)
                             if v2: new_item.update({"Destination": c2, "dest_lat": la2, "dest_lon": lo2})
                         else: new_item.update({"Destination": "-", "dest_lat": None, "dest_lon": None})
-                        st.session_state.itinerary[i] = new_item
-                        st.session_state.edit_index = i
-                        resolve_timeline_overlaps()
+                        st.session_state.itinerary[i] = new_item; st.session_state.edit_index = i; resolve_timeline_overlaps()
+                        supabase.table("team_itineraries").update({"itinerary_data": serialize_itinerary(st.session_state.itinerary)}).eq("team_name", st.session_state.user_id).execute()
                         st.session_state.action_mode = None; st.rerun()
 
     if st.button(f"➕ Add to End", key="add_end", use_container_width=True): st.session_state.insert_index, st.session_state.action_mode = len(st.session_state.itinerary), "select_type"; st.rerun()
@@ -342,7 +341,6 @@ elif st.session_state.view == "Itinerary Builder":
 # --- 9. GLOBAL READ ME ---
 elif st.session_state.view == "Read Me":
     st.title("📖 Read Me")
-    
     with st.container(border=True):
         st.markdown("""
         ### Instructions.
